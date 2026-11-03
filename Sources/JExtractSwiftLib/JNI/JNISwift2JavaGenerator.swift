@@ -44,6 +44,9 @@ package class JNISwift2JavaGenerator: Swift2JavaGenerator {
 
   var thunkNameRegistry = ThunkNameRegistry()
 
+  /// Declarations JNI translation skipped, as "name: reason", for `failOnSkippedDeclarations`.
+  package var skippedDeclarations: [String] = []
+
   /// Jextracted types that already have a minimal JavaKit class wrapper printed for closures.
   var printedMinimalJavaClassWrappers: Set<String> = []
 
@@ -53,8 +56,8 @@ package class JNISwift2JavaGenerator: Swift2JavaGenerator {
   var generatedCDeclSymbolNames: [String] = []
 
   /// Cached Java translation result. 'nil' indicates failed translation.
-  var translatedDecls: [ExtractedFunc: TranslatedFunctionDecl] = [:]
-  var translatedEnumCases: [ExtractedEnumCase: TranslatedEnumCase] = [:]
+  var translatedDecls: [ExtractedFunc: TranslatedFunctionDecl?] = [:]
+  var translatedEnumCases: [ExtractedEnumCase: TranslatedEnumCase?] = [:]
 
   /// Module-qualified identities of extracted types that are surfaced to Java as `SwiftError` exceptions.
   lazy var swiftErrorTypes: Set<SwiftNominalIdentity> = Set(
