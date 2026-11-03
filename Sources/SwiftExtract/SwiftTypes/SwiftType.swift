@@ -513,6 +513,13 @@ extension SwiftType {
       self = knownTypes.optionalSugar(try SwiftType(optionalType.wrappedType, lookupContext: lookupContext))
 
     case .tupleType(let tupleType):
+      // `(T)` is `T` in parentheses, not a tuple: `((Item) -> Void)?` is an optional closure.
+      if tupleType.elements.count == 1, let element = tupleType.elements.first, element.firstName == nil,
+        element.ellipsis == nil
+      {
+        self = try SwiftType(element.type, lookupContext: lookupContext)
+        return
+      }
       self = try .tuple(
         tupleType.elements.map { element in
           SwiftTupleElement(
