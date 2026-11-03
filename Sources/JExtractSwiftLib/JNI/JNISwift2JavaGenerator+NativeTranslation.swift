@@ -133,6 +133,22 @@ extension JNISwift2JavaGenerator {
         if let knownType = nominalType.asKnownType {
           switch knownType {
           case .optional(let wrapped):
+            if let (functionType, _) = JavaTranslation.closureType(type) {
+              let closure = try translateFunctionParameter(
+                swiftType: .function(functionType),
+                functionType: functionType,
+                parameterName: parameterName,
+                methodName: methodName,
+                parentName: parentName
+              )
+              return NativeParameter(
+                parameters: closure.parameters,
+                conversion: .nilOrClosure(closure.conversion),
+                indirectConversion: nil,
+                conversionCheck: nil,
+                syntheticClosure: closure.syntheticClosure
+              )
+            }
             return try translateOptionalParameter(
               wrappedType: wrapped,
               parameterName: parameterName
@@ -1295,6 +1311,21 @@ extension JNISwift2JavaGenerator {
       )
     }
 
+    /// A returned closure, as the handle of a Swift closure Java calls with boxed arguments; 0 for `nil`.
+    func translateSwiftClosureResult(_ functionType: SwiftFunctionType, isOptional: Bool) throws -> NativeResult {
+      // Java calls it synchronously, on any thread.
+      if functionType.isAsync || functionType.isThrowing || functionType.isMainActorIsolated {
+        throw JavaTranslationError.unsupportedSwiftType(.function(functionType))
+      }
+      let argumentBridges = try functionType.parameters.map { try bridgeTypeName(for: $0.type) }
+      let resultBridge = functionType.resultType.isVoid ? nil : try bridgeTypeName(for: functionType.resultType)
+      return NativeResult(
+        javaType: .long,
+        conversion: .swiftClosure(argumentBridges: argumentBridges, resultBridge: resultBridge, isOptional: isOptional),
+        outParameters: []
+      )
+    }
+
     private func bridgeTypeName(for swiftType: SwiftType) throws -> String {
       switch swiftType {
       case .nominal(let nominalType):
@@ -1454,6 +1485,13 @@ extension JNISwift2JavaGenerator {
     )
 
     indirect case initializeSwiftJavaWrapper(NativeSwiftConversionStep, wrapperName: String)
+
+    /// `nil` for a null Java object, otherwise the inner conversion: an optional escaping closure.
+    indirect case nilOrClosure(NativeSwiftConversionStep)
+
+    /// The handle of a new Swift closure calling the closure value, which converts the boxed Java arguments
+    /// and result with these `JobjectBridge`s (no result bridge for `Void`).
+    case swiftClosure(argumentBridges: [String], resultBridge: String?, isOptional: Bool)
 
     indirect case optionalLowering(NativeSwiftConversionStep, discriminatorName: String, valueName: String)
 
@@ -1869,6 +1907,26 @@ extension JNISwift2JavaGenerator {
       case .initializeSwiftJavaWrapper(let inner, let wrapperName):
         let inner = inner.render(&printer, placeholder)
         return "\(wrapperName)(javaThis: \(inner), environment: environment)"
+
+      case .nilOrClosure(let inner):
+        return "\(placeholder) == nil ? nil : \(inner.render(&printer, placeholder))"
+
+      case .swiftClosure(let argumentBridges, let resultBridge, let isOptional):
+        printer.print("let closure$ = \(placeholder)")
+        let arguments = argumentBridges.enumerated().map { index, bridge in
+          "\(bridge).fromJavaObject(_swiftClosureArgument(arguments$, \(index), in: environment), in: environment)"
+        }
+        let call = "closure$(\(arguments.joined(separator: .comma)))"
+        let body =
+          if let resultBridge {
+            ["return \(resultBridge).toJavaObject(\(call), in: environment)"]
+          } else {
+            [call, "return nil"]
+          }
+        let make =
+          (["_makeSwiftClosure { arguments$, environment in"] + body.map { "  \($0)" } + ["}"])
+          .joined(separator: "\n")
+        return isOptional ? "closure$.map { closure$ in \(make) } ?? 0" : make
 
       case .optionalLowering(let valueConversion, let discriminatorName, let valueName):
         let value = valueConversion.render(&printer, valueName)

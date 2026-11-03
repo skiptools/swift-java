@@ -19,6 +19,7 @@ import org.junit.jupiter.api.condition.OS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 // Kotlin lambdas passed as Swift escaping closures. Functional-interface names follow
@@ -47,6 +48,25 @@ class ClosuresTest {
         val out = Notifier.init().transform("a") { item -> Item.init(item.id + "!", item.count + 1) }
         assertEquals("a!", out.id)
         assertEquals(2L, out.count)
+    }
+
+    @Test
+    fun optionalClosureProperty() {
+        val notifier = Notifier.init()
+        val seen = mutableListOf<String>()
+        assertNull(notifier.onItem)
+        notifier.onItem = { item -> seen += item.id }
+        notifier.emit("a")
+        notifier.onItem?.apply(Item.init("b", 1))   // the Swift closure, calling the lambda
+        notifier.onItem = null
+        notifier.emit("c")
+        assertEquals(listOf("a", "b"), seen)
+    }
+
+    @Test
+    fun returnedClosure() {
+        val format = Notifier.init().makeFormatter("#")
+        assertEquals(listOf("#1", "#2"), listOf("1", "2").map { format.apply(Item.init(it, 1)) })
     }
 
     @Test

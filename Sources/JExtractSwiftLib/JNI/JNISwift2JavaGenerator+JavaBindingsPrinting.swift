@@ -974,19 +974,21 @@ extension JNISwift2JavaGenerator {
     {
       return
     }
-    // Overloads of a method share its helper class; the first, with every parameter, prints it.
-    guard printedJavaClosureHelperClasses.insert("\(translated.parentName).\(translated.name)").inserted else {
+    // Overloads of a method share its helper class, and so do a closure property's getter and setter; the
+    // first one prints it.
+    let className = translated.closureHelperClassName
+    guard printedJavaClosureHelperClasses.insert("\(translated.parentName).\(className)").inserted else {
       return
     }
 
     printer.printBraceBlock(
       """
-      public static class \(translated.name)
+      public static class \(className)
       """
     ) { printer in
       // Only holds interfaces. Without a public constructor, Kotlin's `Type.method()` can't also mean
       // `Type.method` constructed, when the method takes no arguments.
-      printer.print("private \(translated.name)() {}")
+      printer.print("private \(className)() {}")
       for functionType in translated.functionTypes {
         if KnownJavaFunctionalInterface.find(functionType.swiftType) != nil {
           continue

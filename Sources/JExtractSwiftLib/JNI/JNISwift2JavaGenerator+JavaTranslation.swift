@@ -236,6 +236,18 @@ extension JNISwift2JavaGenerator {
         }
         resultSignature.result = SwiftResult(convention: .direct, type: streamElementType)
       }
+      // A returned closure crosses as the handle of a Swift closure; Java wraps it in a lambda, below.
+      let closureResult = Self.closureType(decl.functionSignature.result.type).map { closureType, isOptional in
+        var closureType = closureType
+        closureType.isEscaping = true
+        return (closureType, isOptional)
+      }
+      if closureResult != nil {
+        if decl.functionSignature.isAsync || decl.functionSignature.isIsolated || decl.functionSignature.isImplicitlyAsync {
+          throw JavaTranslationError.unsupportedSwiftType(decl.functionSignature.result.type)
+        }
+        resultSignature.result = SwiftResult(convention: .direct, type: knownTypes.int64)
+      }
 
       // Swift -> Java
       var translatedFunctionSignature = try self.translate(
@@ -265,8 +277,8 @@ extension JNISwift2JavaGenerator {
       for (idx, param) in decl.functionSignature.parameters.enumerated() {
         let parameterName = param.parameterName ?? "_\(idx)"
 
-        switch param.type {
-        case .function(let funcTy):
+        switch Self.closureType(param.type) {
+        case .some((let funcTy, _)):
           var translatedClosure = try translateFunctionType(
             name: parameterName,
             swiftType: funcTy,
@@ -286,9 +298,46 @@ extension JNISwift2JavaGenerator {
               nativeFunctionSignature.parameters[idx].syntheticClosure
           }
           funcTypes.append(translatedClosure)
-        default:
+        case .none:
           break
         }
+      }
+
+      var closureHelperClassName = javaName
+      if let (closureType, isOptional) = closureResult {
+        // A getter returns the closure type its setter takes, so Kotlin sees one property.
+        var interfaceName = "result"
+        if decl.apiKind == .getter, Self.hasSetter(decl, config: config) {
+          closureHelperClassName = "set\(decl.name.firstCharacterUppercased)"
+          interfaceName = "newValue"
+        }
+        let translatedClosure = try translateFunctionType(
+          name: interfaceName,
+          swiftType: closureType,
+          parentName: parentName,
+        )
+        funcTypes.append(translatedClosure)
+        let interfaceType = JavaType.class(
+          package: javaPackage,
+          name: String.javaQualifiedName(parentName.fullName, closureHelperClassName, interfaceName)
+        )
+        let nullable = isOptional && config.effectiveOptionalsAsNullable
+        translatedFunctionSignature.result = TranslatedResult(
+          javaType: isOptional && !nullable ? .optional(interfaceType) : interfaceType,
+          nativeJavaType: .long,
+          outParameters: [],
+          conversion: .swiftClosure(
+            .placeholder,
+            interfaceType: interfaceType,
+            parameters: translatedClosure.parameters.map(\.parameter.type.javaType),
+            result: translatedClosure.result.javaType,
+            optional: isOptional ? (nullable ? .nullable : .javaOptional) : nil
+          )
+        )
+        nativeFunctionSignature.result = try nativeTranslation.translateSwiftClosureResult(
+          closureType,
+          isOptional: isOptional
+        )
       }
 
       if streamElementType != nil {
@@ -332,6 +381,7 @@ extension JNISwift2JavaGenerator {
         isImplicitlyAsync: decl.functionSignature.isImplicitlyAsync,
         nativeFunctionName: "$\(javaName)",
         parentName: parentName,
+        closureHelperClassName: closureHelperClassName,
         functionTypes: funcTypes,
         translatedFunctionSignature: translatedFunctionSignature,
         nativeFunctionSignature: nativeFunctionSignature,
@@ -518,6 +568,24 @@ extension JNISwift2JavaGenerator {
         if let knownType = nominalType.asKnownType {
           switch knownType {
           case .optional(let wrapped):
+            if let (functionType, _) = Self.closureType(swiftType) {
+              let closure = translateFunctionParameter(
+                swiftType: .function(functionType),
+                functionType: functionType,
+                parameterName: parameterName,
+                methodName: methodName,
+                parentName: parentName,
+                parameterAnnotations: parameterAnnotations
+              )
+              return TranslatedParameter(
+                parameter: JavaParameter(
+                  name: parameterName,
+                  type: .optional(closure.parameter.type.javaType),
+                  annotations: parameterAnnotations
+                ),
+                conversion: .method(.placeholder, function: "orElse", arguments: [.constant("null")])
+              )
+            }
             return try translateOptionalParameter(
               wrappedType: wrapped,
               parameterName: parameterName,
@@ -941,6 +1009,34 @@ extension JNISwift2JavaGenerator {
         ),
         conversion: .placeholder,
       )
+    }
+
+    /// The closure type of a closure or optional closure. An optional closure is escaping: it can be stored, and
+    /// only escaping closure types get their own functional interface.
+    static func closureType(_ type: SwiftType) -> (SwiftFunctionType, isOptional: Bool)? {
+      switch type {
+      case .function(let functionType):
+        return (functionType, false)
+      case .nominal(let nominal):
+        guard case .optional(.function(var functionType)) = nominal.asKnownType else {
+          return nil
+        }
+        functionType.isEscaping = true
+        return (functionType, true)
+      default:
+        return nil
+      }
+    }
+
+    /// Whether the property of this getter also has a setter.
+    static func hasSetter(_ getter: ExtractedFunc, config: Configuration) -> Bool {
+      guard let variable = getter.swiftDecl.as(VariableDeclSyntax.self), let binding = variable.bindings.first else {
+        return false
+      }
+      return variable.supportedAccessorKinds(
+        binding: binding,
+        minimumAccessLevel: config.effectiveMinimumInputAccessLevelMode
+      ).contains(.set)
     }
 
     static func isOptional(_ type: SwiftType) -> Bool {
@@ -1980,6 +2076,9 @@ extension JNISwift2JavaGenerator {
     /// The name of the Java parent scope this function is declared in
     var parentName: SwiftQualifiedTypeName
 
+    /// The class holding `functionTypes`: the Java method name, or a getter's setter name.
+    var closureHelperClassName: String
+
     /// Functional interfaces required for the Java method.
     var functionTypes: [TranslatedFunctionType]
 
@@ -2204,6 +2303,21 @@ extension JNISwift2JavaGenerator {
 
     indirect case placeToVar(JavaNativeConversionStep, name: String, type: JavaType? = nil)
 
+    /// A lambda of `interfaceType` over the Swift closure whose handle is the inner value; its arguments
+    /// and result are boxed through `SwiftClosure.call`. Optional when the handle may be 0, for `nil`.
+    indirect case swiftClosure(
+      JavaNativeConversionStep,
+      interfaceType: JavaType,
+      parameters: [JavaType],
+      result: JavaType,
+      optional: OptionalForm?
+    )
+
+    enum OptionalForm {
+      case nullable
+      case javaOptional
+    }
+
     /// `Arrays.stream(args)`
     static func arraysStream(_ argument: JavaNativeConversionStep) -> JavaNativeConversionStep {
       .method(.constant("Arrays"), function: "stream", arguments: [argument])
@@ -2380,6 +2494,29 @@ extension JNISwift2JavaGenerator {
         let type = type?.description ?? "var"
         printer.print("\(type) \(name) = \(inner);")
         return name
+
+      case .swiftClosure(let inner, let interfaceType, let parameters, let result, let optional):
+        let handle = inner.render(&printer, placeholder)
+        let closureClass = "org.swift.swiftkit.core.SwiftClosure"
+        if optional == nil {
+          printer.print("\(closureClass) closure$ = new \(closureClass)(\(handle));")
+        } else {
+          printer.print("long closure$handle = \(handle);")
+          printer.print("\(closureClass) closure$ = closure$handle == 0 ? null : new \(closureClass)(closure$handle);")
+        }
+        let names = parameters.indices.map { "closure$\($0)" }
+        let lambdaParameters = zip(parameters, names).map { "\($0) \($1)" }.joined(separator: .comma)
+        let call = "closure$.call(\(names.joined(separator: .comma)))"
+        let body = result == .void ? call : "(\(result)) \(call)"
+        let lambda = "(\(interfaceType)) (\(lambdaParameters)) -> \(body)"
+        switch optional {
+        case nil:
+          return lambda
+        case .nullable:
+          return "closure$ == null ? null : \(lambda)"
+        case .javaOptional:
+          return "java.util.Optional.ofNullable(closure$ == null ? null : \(lambda))"
+        }
       }
     }
 
@@ -2447,6 +2584,9 @@ extension JNISwift2JavaGenerator {
         return elements.contains(where: { $0.elementConversion.requiresSwiftArena })
 
       case .placeToVar(let inner, _, _):
+        return inner.requiresSwiftArena
+
+      case .swiftClosure(let inner, _, _, _, _):
         return inner.requiresSwiftArena
       }
     }
