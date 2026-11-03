@@ -78,6 +78,12 @@ tasks.named<Test>("test") {
         "-Djava.library.path=" + javaLibraryPaths(project.projectDir).joinToString(File.pathSeparator),
     )
 
+    // Run tests on the process's first thread, which Swift treats as the main actor's thread (as on
+    // Android's UI thread), so main-actor isolated APIs can be called. macOS only.
+    if (System.getProperty("os.name").startsWith("Mac")) {
+        jvmArgs("-XstartOnFirstThread")
+    }
+
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
