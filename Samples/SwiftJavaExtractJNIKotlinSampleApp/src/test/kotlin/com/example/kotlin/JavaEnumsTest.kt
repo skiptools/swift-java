@@ -24,36 +24,36 @@ import kotlin.test.assertTrue
 class JavaEnumsTest {
     @Test
     fun exhaustiveWhen() {
-        val label = when (Orders.fill(OrderStatus.PENDING)) {
-            OrderStatus.PENDING -> "pending"
-            OrderStatus.FILLED -> "filled"
-            OrderStatus.CANCELLED -> "cancelled"
+        val label = when (Orders.fill(OrderStatus.pending)) {
+            OrderStatus.pending -> "pending"
+            OrderStatus.filled -> "filled"
+            OrderStatus.cancelled -> "cancelled"
         }
         assertEquals("filled", label)
     }
 
     @Test
     fun constantsAreTheValuesSwiftReturns() {
-        assertSame(OrderStatus.FILLED, Orders.fill(OrderStatus.PENDING))
+        assertSame(OrderStatus.filled, Orders.fill(OrderStatus.pending))
         assertEquals(OrderStatus.entries, Orders.all().toList())
-        assertEquals("cancelled", OrderStatus.CANCELLED.rawValue)
-        assertTrue(OrderStatus.CANCELLED.isFinal)
+        assertEquals("cancelled", OrderStatus.cancelled.rawValue)
+        assertTrue(OrderStatus.cancelled.isFinal)
     }
 
     @Test
     fun everywhereAValueCrosses() = runBlocking {
-        assertSame(OrderStatus.PENDING, Orders.status("a"))
-        assertSame(OrderStatus.FILLED, Orders.byID()["a"])
-        assertSame(OrderStatus.CANCELLED, Order.init("a", OrderStatus.CANCELLED).status)
-        assertSame(OrderStatus.FILLED, (Orders.event(OrderStatus.FILLED).case as OrderEvent.Case.Changed).arg0)
+        assertSame(OrderStatus.pending, Orders.status("a"))
+        assertSame(OrderStatus.filled, Orders.byID()["a"])
+        assertSame(OrderStatus.cancelled, Order.init("a", OrderStatus.cancelled).status)
+        assertSame(OrderStatus.filled, (Orders.event(OrderStatus.filled).case as OrderEvent.Case.Changed).arg0)
         var seen: OrderStatus? = null
         Orders.watch { seen = it }
-        assertSame(OrderStatus.CANCELLED, seen)
-        assertSame(OrderStatus.FILLED, Orders.settle().await())
+        assertSame(OrderStatus.cancelled, seen)
+        assertSame(OrderStatus.filled, Orders.settle().await())
     }
 
     @Test
     fun manyRoundTrips() {
-        repeat(10_000) { assertSame(OrderStatus.FILLED, Orders.fill(OrderStatus.FILLED)) }
+        repeat(10_000) { assertSame(OrderStatus.filled, Orders.fill(OrderStatus.filled)) }
     }
 }
