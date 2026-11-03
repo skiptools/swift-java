@@ -52,6 +52,9 @@ package class JNISwift2JavaGenerator: Swift2JavaGenerator {
 
   /// Jextracted types that already have a minimal JavaKit class wrapper printed for closures.
   var printedMinimalJavaClassWrappers: Set<String> = []
+  /// Overloads for default arguments share their closure parameters' wrappers and Java interfaces.
+  var printedEscapingClosureWrappers: Set<String> = []
+  var printedJavaClosureHelperClasses: Set<String> = []
 
   /// Accumulates every ``@_cdecl`` symbol name emitted during thunk printing.
   /// Written to a linker version script after generation when
