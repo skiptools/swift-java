@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import KotlinSampleModels
 import Synchronization
 
 /// A view model's stream of updates, collected in Kotlin as a Flow.
@@ -27,6 +28,16 @@ public final class PriceFeed: Sendable {
         continuation.yield(Item(id: "price-\(i)", count: i))
       }
       continuation.finish()
+    }
+  }
+
+  /// Prices until the connection drops: the stream then fails with `ClientError.offline`.
+  public func pricesUntilOffline(count: Int64) -> AsyncThrowingStream<Item, Error> {
+    AsyncThrowingStream { continuation in
+      for i in 0..<count {
+        continuation.yield(Item(id: "price-\(i)", count: i))
+      }
+      continuation.finish(throwing: ClientError.offline)
     }
   }
 

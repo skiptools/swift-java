@@ -14,6 +14,7 @@
 
 package com.example.kotlin
 
+import com.example.kotlin.models.ClientError
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
@@ -21,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import org.swift.swiftkit.kotlin.asFlow
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class StreamsTest {
@@ -28,6 +30,16 @@ class StreamsTest {
     fun collectAsAFlow() = runBlocking {
         val ids = PriceFeed.init().prices(3).asFlow().map { it.id }.toList()
         assertEquals(listOf("price-0", "price-1", "price-2"), ids)
+    }
+
+    @Test
+    fun aThrowingStreamFailsTheFlowWithTheSwiftError() = runBlocking {
+        val ids = mutableListOf<String>()
+        val error = assertFailsWith<ClientError> {
+            PriceFeed.init().pricesUntilOffline(2).asFlow().collect { ids += it.id }
+        }
+        assertEquals(listOf("price-0", "price-1"), ids)
+        assertTrue(error.case is ClientError.Case.Offline)
     }
 
     @Test
