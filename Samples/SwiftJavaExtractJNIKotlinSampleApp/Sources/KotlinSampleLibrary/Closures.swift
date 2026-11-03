@@ -19,7 +19,19 @@ import Dispatch
 public final class Notifier {
   private var handler: ((Item) -> Void)?
 
+  /// An optional closure property: a Kotlin property of the setter's functional interface.
+  public var onItem: ((Item) -> Void)?
+
   public init() {}
+
+  public func emit(id: String) {
+    onItem?(Item(id: id, count: 1))
+  }
+
+  /// A closure returned to Kotlin.
+  public func makeFormatter(prefix: String) -> (Item) -> String {
+    { "\(prefix)\($0.id)" }
+  }
 
   public func setHandler(_ handler: @escaping (Item) -> Void) {
     self.handler = handler
