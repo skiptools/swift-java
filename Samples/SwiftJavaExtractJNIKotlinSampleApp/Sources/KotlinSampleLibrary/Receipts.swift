@@ -18,3 +18,25 @@ public enum Receipts {
     "\(showsSign && amount > 0 ? "+" : "")\(amount) \(currency)"
   }
 }
+
+/// Callbacks with defaults, like a view model's: Kotlin passes both or neither.
+public struct ReceiptPrinter: Sendable {
+  private let onPrinted: @Sendable (String) -> Void
+  private let onFailed: @Sendable () -> Void
+
+  public init(
+    onPrinted: @escaping @Sendable (String) -> Void = { _ in },
+    onFailed: @escaping @Sendable () -> Void = {}
+  ) {
+    self.onPrinted = onPrinted
+    self.onFailed = onFailed
+  }
+
+  public func print(_ amount: Int64) {
+    if amount >= 0 {
+      onPrinted(Receipts.format(amount))
+    } else {
+      onFailed()
+    }
+  }
+}
