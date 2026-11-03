@@ -34,6 +34,11 @@ public final class Notifier {
     cb("a", 1, nil) && cb("b", 2, Item(id: "b", count: 2))
   }
 
+  /// A non-escaping closure taking and returning a struct.
+  public func transform(id: String, _ f: (Item) -> Item) -> Item {
+    f(Item(id: id, count: 1))
+  }
+
   /// A @Sendable closure called on another thread: the upcall uses that thread's JNIEnv.
   public func deliverInBackground(id: String, _ cb: @escaping @Sendable (Item) -> Void) {
     let group = DispatchGroup()
