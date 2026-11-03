@@ -61,9 +61,9 @@ tasks.build {
 
 dependencies {
     implementation(projects.swiftKitCore)
+    implementation(projects.swiftKitKotlin)
 
     testImplementation(kotlin("test-junit5"))
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     testRuntimeOnly(libs.junit.platform.launcher) // TODO: workaround for not finding junit: https://github.com/gradle/gradle/issues/34512
 }
 
