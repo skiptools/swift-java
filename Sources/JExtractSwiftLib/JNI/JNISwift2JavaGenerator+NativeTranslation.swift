@@ -126,12 +126,30 @@ extension JNISwift2JavaGenerator {
       genericParameters: [SwiftGenericParameterDeclaration],
       genericRequirements: [SwiftGenericRequirement]
     ) throws -> NativeParameter {
+      // A Swift error arrives as a Java `Throwable`.
+      if type.isSwiftError {
+        return NativeParameter(
+          parameters: [JavaParameter(name: parameterName, type: .javaLangThrowable)],
+          conversion: .swiftErrorFromJava(isOptional: false),
+          indirectConversion: nil,
+          conversionCheck: nil
+        )
+      }
+
       switch type {
       case .nominal(let nominalType):
         let nominalTypeName = nominalType.nominalTypeDecl.name
 
         if let knownType = nominalType.asKnownType {
           switch knownType {
+          case .optional(let wrapped) where wrapped.isSwiftError:
+            return NativeParameter(
+              parameters: [JavaParameter(name: parameterName, type: .javaLangThrowable)],
+              conversion: .swiftErrorFromJava(isOptional: true),
+              indirectConversion: nil,
+              conversionCheck: nil
+            )
+
           case .optional(let wrapped):
             if let (functionType, _) = JavaTranslation.closureType(type) {
               let closure = try translateFunctionParameter(
@@ -859,11 +877,19 @@ extension JNISwift2JavaGenerator {
       methodName: String,
       resultName: String = "result"
     ) throws -> NativeResult {
+      // A Swift error is returned as a Java `Throwable`.
+      if swiftType.isSwiftError {
+        return NativeResult(javaType: .javaLangThrowable, conversion: .javaThrowable(isOptional: false), outParameters: [])
+      }
+
       switch swiftType {
       case .nominal(let nominalType):
         let nominalTypeName = nominalType.nominalTypeDecl.qualifiedName
         if let knownType = nominalType.asKnownType {
           switch knownType {
+          case .optional(let wrapped) where wrapped.isSwiftError:
+            return NativeResult(javaType: .javaLangThrowable, conversion: .javaThrowable(isOptional: true), outParameters: [])
+
           case .optional(let wrapped):
             return try translateOptionalResult(wrappedType: wrapped, methodName: methodName, resultName: resultName)
 
@@ -1327,6 +1353,9 @@ extension JNISwift2JavaGenerator {
     }
 
     private func bridgeTypeName(for swiftType: SwiftType) throws -> String {
+      if swiftType.isSwiftError {
+        return "ErrorBridge"
+      }
       switch swiftType {
       case .nominal(let nominalType):
         if let knownType = nominalType.asKnownType {
@@ -1485,6 +1514,12 @@ extension JNISwift2JavaGenerator {
     )
 
     indirect case initializeSwiftJavaWrapper(NativeSwiftConversionStep, wrapperName: String)
+
+    /// The Swift error for a Java `Throwable` argument; `nil` for `null` when optional.
+    case swiftErrorFromJava(isOptional: Bool)
+
+    /// The Java `Throwable` for a Swift error result; `null` for `nil` when optional.
+    case javaThrowable(isOptional: Bool)
 
     /// `nil` for a null Java object, otherwise the inner conversion: an optional escaping closure.
     indirect case nilOrClosure(NativeSwiftConversionStep)
@@ -1930,6 +1965,16 @@ extension JNISwift2JavaGenerator {
       case .initializeSwiftJavaWrapper(let inner, let wrapperName):
         let inner = inner.render(&printer, placeholder)
         return "\(wrapperName)(javaThis: \(inner), environment: environment)"
+
+      case .swiftErrorFromJava(let isOptional):
+        return isOptional
+          ? "\(placeholder).map { environment.makeSwiftError(for: $0) }"
+          : "environment.makeSwiftError(for: \(placeholder)!)"
+
+      case .javaThrowable(let isOptional):
+        return isOptional
+          ? "(\(placeholder)).flatMap { environment.makeJavaThrowableLocalRef(for: $0) }"
+          : "environment.makeJavaThrowableLocalRef(for: \(placeholder))"
 
       case .nilOrClosure(let inner):
         return "\(placeholder) == nil ? nil : \(inner.render(&printer, placeholder))"

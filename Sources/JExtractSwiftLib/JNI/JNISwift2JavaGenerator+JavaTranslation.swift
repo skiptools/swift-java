@@ -589,6 +589,14 @@ extension JNISwift2JavaGenerator {
       // If the result type should cause any annotations on the method, include them here.
       let parameterAnnotations: [JavaAnnotation] = getJavaTypeAnnotations(swiftType: swiftType, config: config)
 
+      // A Swift error is a Java `Throwable`.
+      if swiftType.isSwiftError {
+        return TranslatedParameter(
+          parameter: JavaParameter(name: parameterName, type: .javaLangThrowable, annotations: parameterAnnotations),
+          conversion: .placeholder
+        )
+      }
+
       switch swiftType {
       case .nominal(let nominalType):
         let nominalTypeName = nominalType.nominalTypeDecl.qualifiedName
@@ -596,6 +604,16 @@ extension JNISwift2JavaGenerator {
         if let knownType = nominalType.asKnownType {
           switch knownType {
           case .optional(let wrapped):
+            if wrapped.isSwiftError {
+              return TranslatedParameter(
+                parameter: JavaParameter(
+                  name: parameterName,
+                  type: .optional(.javaLangThrowable),
+                  annotations: parameterAnnotations
+                ),
+                conversion: .method(.placeholder, function: "orElse", arguments: [.constant("null")])
+              )
+            }
             if let (functionType, _) = Self.closureType(swiftType) {
               let closure = translateFunctionParameter(
                 swiftType: .function(functionType),
@@ -1235,11 +1253,31 @@ extension JNISwift2JavaGenerator {
       // If the result type should cause any annotations on the method, include them here.
       let resultAnnotations: [JavaAnnotation] = getJavaTypeAnnotations(swiftType: swiftType, config: config)
 
+      // A Swift error is a Java `Throwable`, `null` for `nil`.
+      if swiftType.isSwiftError {
+        return TranslatedResult(
+          javaType: .javaLangThrowable,
+          nativeJavaType: .javaLangThrowable,
+          annotations: resultAnnotations,
+          outParameters: [],
+          conversion: .placeholder
+        )
+      }
+
       switch swiftType {
       case .nominal(let nominalType):
         let nominalTypeName = nominalType.nominalTypeDecl.qualifiedName
         if let knownType = nominalType.asKnownType {
           switch knownType {
+          case .optional(let wrapped) where wrapped.isSwiftError:
+            return TranslatedResult(
+              javaType: .optional(.javaLangThrowable),
+              nativeJavaType: .javaLangThrowable,
+              annotations: resultAnnotations,
+              outParameters: [],
+              conversion: .method(.constant("java.util.Optional"), function: "ofNullable", arguments: [.placeholder])
+            )
+
           case .optional(let wrapped):
             return try translateOptionalResult(
               wrappedType: wrapped,

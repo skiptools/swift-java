@@ -241,6 +241,9 @@ extension JNISwift2JavaGenerator {
       if type.isDirectlyTranslatedToWrapJava {
         return .placeholder
       }
+      if type.isSwiftError {
+        return .toJavaThrowable(.placeholder)
+      }
 
       switch type {
       case .nominal(let nominalType):
@@ -425,6 +428,9 @@ enum UpcallConversionStep {
 
   indirect case toJavaOptional(UpcallConversionStep)
 
+  /// A Swift error as SwiftJava's `Throwable`.
+  indirect case toJavaThrowable(UpcallConversionStep)
+
   indirect case fromJavaOptional(UpcallConversionStep)
 
   indirect case map(UpcallConversionStep, body: UpcallConversionStep)
@@ -479,6 +485,10 @@ enum UpcallConversionStep {
     case .toJavaOptional(let inner):
       let inner = inner.render(&printer, placeholder)
       return "\(inner).toJavaOptional()"
+
+    case .toJavaThrowable(let inner):
+      let inner = inner.render(&printer, placeholder)
+      return "_makeThrowable(for: \(inner))"
 
     case .fromJavaOptional(let inner):
       let inner = inner.render(&printer, placeholder)

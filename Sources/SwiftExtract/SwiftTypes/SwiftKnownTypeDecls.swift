@@ -57,9 +57,11 @@ public enum SwiftKnownType: Equatable {
   case essentialsUUID
   case foundationURL
   case essentialsURL
+  case error
 
   public init?(kind: SwiftKnownTypeDeclKind, genericArguments: [SwiftType]?) {
     switch kind {
+    case .error: self = .error
     case .bool: self = .bool
     case .int: self = .int
     case .uint: self = .uint
@@ -165,6 +167,7 @@ public enum SwiftKnownType: Equatable {
     case .essentialsUUID: .essentialsUUID
     case .foundationURL: .foundationURL
     case .essentialsURL: .essentialsURL
+    case .error: .error
     }
   }
 }
@@ -201,6 +204,7 @@ public enum SwiftKnownTypeDeclKind: String, Hashable {
   case set = "Swift.Set"
   case asyncStream = "Swift.AsyncStream"
   case asyncThrowingStream = "Swift.AsyncThrowingStream"
+  case error = "Swift.Error"
 
   // Foundation
   case foundationDataProtocol = "Foundation.DataProtocol"

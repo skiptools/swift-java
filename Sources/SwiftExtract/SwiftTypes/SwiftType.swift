@@ -102,6 +102,18 @@ public enum SwiftType: Equatable {
     }
   }
 
+  /// Whether this is `Error` or `any Error`: a Swift error of any type.
+  public var isSwiftError: Bool {
+    switch self {
+    case .nominal(let nominal):
+      return nominal.nominalTypeDecl.knownTypeKind == .error
+    case .existential(let constraint):
+      return constraint.isSwiftError
+    default:
+      return false
+    }
+  }
+
   public var isBoolean: Bool {
     if case let .nominal(nominal) = self {
       return nominal.nominalTypeDecl.knownTypeKind == .bool
