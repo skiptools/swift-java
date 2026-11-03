@@ -29,6 +29,7 @@ extension JNISwift2JavaGenerator {
       knownTypes: SwiftKnownTypes(symbolTable: lookupContext.symbolTable),
       protocolWrappers: self.interfaceProtocolWrappers,
       logger: self.logger,
+      javaCallbackModules: self.javaCallbackModules,
       errorTypes: self.swiftErrorTypes,
       javaIdentifiers: self.currentJavaIdentifiers
     )
@@ -115,6 +116,7 @@ extension JNISwift2JavaGenerator {
         knownTypes: SwiftKnownTypes(symbolTable: lookupContext.symbolTable),
         protocolWrappers: self.interfaceProtocolWrappers,
         logger: self.logger,
+        javaCallbackModules: self.javaCallbackModules,
         errorTypes: self.swiftErrorTypes,
         javaIdentifiers: self.currentJavaIdentifiers,
       )
@@ -137,6 +139,7 @@ extension JNISwift2JavaGenerator {
     var knownTypes: SwiftKnownTypes
     let protocolWrappers: [ExtractedNominalType: JavaInterfaceSwiftWrapper]
     let logger: Logger
+    var javaCallbackModules: Set<String> = []
     /// Module-qualified identities of extracted types that are surfaced to Java as `SwiftError` exceptions.
     let errorTypes: Set<SwiftNominalIdentity>
     var javaIdentifiers: JavaIdentifierFactory
@@ -210,6 +213,7 @@ extension JNISwift2JavaGenerator {
         knownTypes: self.knownTypes,
         protocolWrappers: self.protocolWrappers,
         logger: self.logger,
+        javaCallbackModules: self.javaCallbackModules,
       )
 
       // Types with no parent will be outputted inside a "module" class.
@@ -2270,6 +2274,9 @@ extension JNISwift2JavaGenerator {
 
     /// `inout` parameters have no Java equivalent yet.
     case inoutParametersNotSupported
+
+    /// Java can implement `async` protocol requirements only in `completableFuture` async mode.
+    case asyncRequirementNeedsCompletableFuture
 
     // FIXME: Remove once we support protocol variables
     case protocolVariablesNotSupported
