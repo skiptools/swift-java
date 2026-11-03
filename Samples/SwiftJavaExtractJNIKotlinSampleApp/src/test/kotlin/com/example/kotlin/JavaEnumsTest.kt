@@ -42,7 +42,7 @@ class JavaEnumsTest {
 
     @Test
     fun everywhereAValueCrosses() = runBlocking {
-        assertSame(OrderStatus.PENDING, Orders.status("a").get())
+        assertSame(OrderStatus.PENDING, Orders.status("a"))
         assertSame(OrderStatus.FILLED, Orders.byID()["a"])
         assertSame(OrderStatus.CANCELLED, Order.init("a", OrderStatus.CANCELLED).status)
         assertSame(OrderStatus.FILLED, (Orders.event(OrderStatus.FILLED).case as OrderEvent.Case.Changed).arg0)
