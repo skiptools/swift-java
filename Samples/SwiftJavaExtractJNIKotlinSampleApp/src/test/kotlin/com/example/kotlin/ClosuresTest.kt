@@ -14,6 +14,13 @@
 
 package com.example.kotlin
 
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.future.await
+import kotlinx.coroutines.future.future
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.condition.EnabledOnOs
 import org.junit.jupiter.api.condition.OS
 import kotlin.test.Test
@@ -24,6 +31,7 @@ import kotlin.test.assertTrue
 
 // Kotlin lambdas passed as Swift escaping closures. Functional-interface names follow
 // `<Type>.<method>.<parameter>`; Kotlin converts lambdas to them.
+@OptIn(DelicateCoroutinesApi::class)
 class ClosuresTest {
     @Test
     fun structParameter() {
@@ -67,6 +75,20 @@ class ClosuresTest {
     fun returnedClosure() {
         val format = Notifier.init().makeFormatter("#")
         assertEquals(listOf("#1", "#2"), listOf("1", "2").map { format.apply(Item.init(it, 1)) })
+    }
+
+    @Test
+    fun asyncClosureIsAwaited() = runBlocking {
+        val seen = java.util.concurrent.CopyOnWriteArrayList<String>()
+        Notifier.init().perform("z") { item ->
+            // A coroutine, as a CompletableFuture
+            GlobalScope.future<Void?>(Dispatchers.Default) {
+                delay(50)
+                seen += item.id
+                null
+            }
+        }.await()
+        assertEquals(listOf("z"), seen.toList())
     }
 
     @Test

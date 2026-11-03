@@ -51,6 +51,11 @@ public final class Notifier {
     f(Item(id: id, count: 1))
   }
 
+  /// An async closure: Swift awaits the future the Kotlin lambda returns.
+  public func perform(id: String, _ work: @escaping @Sendable (Item) async -> Void) async {
+    await work(Item(id: id, count: 1))
+  }
+
   /// A @Sendable closure called on another thread: the upcall uses that thread's JNIEnv.
   public func deliverInBackground(id: String, _ cb: @escaping @Sendable (Item) -> Void) {
     let group = DispatchGroup()

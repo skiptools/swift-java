@@ -386,8 +386,8 @@ extension JNISwift2JavaGenerator {
       methodName: String,
       parentName: SwiftQualifiedTypeName
     ) throws -> NativeParameter {
-      if !functionType.isEscaping {
-        // The legacy lowering handles primitive arguments and results only. Other closures go through
+      if !functionType.isEscaping && !functionType.isAsync {
+        // The legacy lowering handles synchronous primitive closures only. Other closures go through
         // the escaping one: its Swift closure can be passed where a non-escaping one is expected.
         if let legacy = try? translateNonEscapingFunctionParameter(
           functionType: functionType,
@@ -420,7 +420,7 @@ extension JNISwift2JavaGenerator {
         method: methodName,
         qualifier: parameterName,
       )
-      let generator = JavaInterfaceProtocolWrapperGenerator()
+      let generator = JavaInterfaceProtocolWrapperGenerator(asyncFuncMode: config.effectiveAsyncFuncMode)
       let syntheticFunction = try generator.generateSyntheticClosureFunction(
         functionType: functionType,
         javaInterfaceName: javaClosureInterfaceName,
@@ -1862,11 +1862,34 @@ extension JNISwift2JavaGenerator {
         let argumentPrefix = argPrinter.finalize()
 
         // Build result conversion
-        // Note: The Java interface is synchronous even for async closures.
-        // The async nature is on the Swift side, inferred from the expected type.
         var resultPrinter = SwiftPrinter()
-        let upcallExpr = "\(callInterfaceVar).apply(\(upcallArguments.joined(separator: .comma)))"
-        let resultConverted = syntheticFunction.resultConversion.render(&resultPrinter, upcallExpr)
+        var resultConverted: String
+        if fn.isAsync {
+          // Java returns a `CompletableFuture`, awaited without blocking a thread; a Java failure traps
+          // unless the closure throws. wrap-java doesn't bind a generic `CompletableFuture<T>` result,
+          // so `apply` is called dynamically.
+          let tryKeyword = fn.isThrowing ? "try" : "try!"
+          let arguments = upcallArguments.isEmpty ? "" : "arguments: \(upcallArguments.joined(separator: .comma)), "
+          resultPrinter.print(
+            "let future$ = \(tryKeyword) \(callInterfaceVar).dynamicJavaMethodCall(methodName: \"apply\", \(arguments)resultType: JavaCompletableFuture?.self)"
+          )
+          resultPrinter.print("guard let future$ else { fatalError(\"Upcall to apply unexpectedly returned a null future\") }")
+          if isVoid {
+            resultConverted = "_ = \(tryKeyword) await _awaitCompletableFuture(future$)"
+          } else {
+            resultPrinter.print("let result$ = \(tryKeyword) await _awaitCompletableFuture(future$)")
+            if fn.resultType.isDirectlyTranslatedToWrapJava {
+              // The task may have resumed on another thread: use its environment.
+              resultConverted =
+                "\(fn.resultType).fromJavaObject(result$?.javaThis, in: try! JavaVirtualMachine.shared().environment())"
+            } else {
+              resultConverted = syntheticFunction.resultConversion.render(&resultPrinter, "result$")
+            }
+          }
+        } else {
+          let upcallExpr = "\(callInterfaceVar).apply(\(upcallArguments.joined(separator: .comma)))"
+          resultConverted = syntheticFunction.resultConversion.render(&resultPrinter, upcallExpr)
+        }
         let resultPrefix = resultPrinter.finalize()
 
         // Note: async is part of the closure TYPE, not the closure literal syntax.

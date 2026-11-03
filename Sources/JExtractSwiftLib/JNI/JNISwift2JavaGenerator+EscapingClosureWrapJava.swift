@@ -144,6 +144,10 @@ extension JNISwift2JavaGenerator {
     }
     let paramList = "(\(params.joined(separator: .comma)))"
 
+    // Java returns a `CompletableFuture` for an async closure, which the closure awaits.
+    if type.isAsync {
+      return "\(paramList) -> JavaCompletableFuture!"
+    }
     if type.resultType.isVoid {
       return paramList
     } else {

@@ -411,7 +411,11 @@ extension JNISwift2JavaGenerator {
         )
       }
 
-      let translatedResult = try translateResult(swiftType: swiftType.resultType, methodName: name)
+      var translatedResult = try translateResult(swiftType: swiftType.resultType, methodName: name)
+      // An async closure implemented in Java returns a future, which Swift awaits.
+      if swiftType.isAsync {
+        translatedResult.javaType = .completableFuture(translatedResult.javaType)
+      }
 
       return TranslatedFunctionType(
         name: name,

@@ -145,11 +145,15 @@ extension JNISwift2JavaGenerator {
     /// wrapper awaits; its value arrives as a plain Java object. Supported results: `Void`, types
     /// translated directly (unboxed via `JavaBoxable`), and jextracted types.
     private func validateAsyncRequirement(_ signature: SwiftFunctionSignature) throws {
+      try validateAsyncResult(signature.result.type)
+    }
+
+    /// An async requirement or closure implemented in Java returns a `CompletableFuture`: see `validateAsyncRequirement`.
+    private func validateAsyncResult(_ resultType: SwiftType) throws {
       guard asyncFuncMode == .completableFuture else {
         // A `java.util.concurrent.Future` can't notify Swift when it completes.
         throw JavaTranslationError.asyncRequirementNeedsCompletableFuture
       }
-      let resultType = signature.result.type
       if resultType.isVoid {
         return
       }
@@ -173,6 +177,9 @@ extension JNISwift2JavaGenerator {
       javaInterfaceName: String,
       javaBinaryName: String,
     ) throws -> SyntheticEscapingClosureFunctionType {
+      if functionType.isAsync {
+        try validateAsyncResult(functionType.resultType)
+      }
       let parameterConversions = try functionType.parameters.enumerated().map { idx, param in
         try self.translateParameter(
           parameterName: param.parameterName ?? "_\(idx)",
