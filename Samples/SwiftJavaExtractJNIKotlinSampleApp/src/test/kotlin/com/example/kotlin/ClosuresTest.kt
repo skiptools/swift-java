@@ -43,6 +43,13 @@ class ClosuresTest {
     }
 
     @Test
+    fun nonEscapingStructClosure() {
+        val out = Notifier.init().transform("a") { item -> Item.init(item.id + "!", item.count + 1) }
+        assertEquals("a!", out.id)
+        assertEquals(2L, out.count)
+    }
+
+    @Test
     fun sendableClosureCalledFromAnotherThread() {
         val testThread = Thread.currentThread()
         var calledOn: Thread? = null
