@@ -14,32 +14,14 @@
 
 package com.example.kotlin
 
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.channels.trySendBlocking
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
-import org.swift.swiftkit.core.SwiftAsyncStream
+import org.swift.swiftkit.kotlin.asFlow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-
-/** A Swift AsyncStream as a Kotlin Flow: cancelling the collector cancels the Swift task. */
-fun <T> SwiftAsyncStream<T>.asFlow(): Flow<T> = callbackFlow {
-    val subscription = subscribe(object : SwiftAsyncStream.Subscriber<T> {
-        override fun onNext(value: T) {
-            trySendBlocking(value)
-        }
-
-        override fun onComplete() {
-            close()
-        }
-    })
-    awaitClose { subscription.cancel() }
-}
 
 class StreamsTest {
     @Test
