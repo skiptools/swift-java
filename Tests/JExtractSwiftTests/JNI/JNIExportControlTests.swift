@@ -16,6 +16,7 @@ import CodePrinting
 import JExtractSwiftLib
 import SwiftExtract
 import SwiftJavaConfigurationShared
+import SwiftParser
 import Testing
 
 /// `@JavaExport(false)` opts declarations out, and `exportMode: annotated` exports only marked ones.
@@ -74,11 +75,25 @@ struct JNIExportControlTests {
     return config
   }
 
-  /// Generates Java and Swift, returning every declaration that was skipped along the way.
-  private func skipped(_ source: String, _ exportMode: JExtractExportMode) throws -> [String] {
+  /// Generates Java and Swift, returning the Java and every declaration that was skipped along the way.
+  /// `dependencies` maps a dependency module's name to its source and export mode.
+  private func generate(
+    _ source: String,
+    _ exportMode: JExtractExportMode,
+    dependencies: [String: (source: String, exportMode: JExtractExportMode)] = [:]
+  ) throws -> (java: String, skipped: [String]) {
     let config = config(exportMode)
     let sink = SkippedDeclarationCollector()
-    let translator = makeSwiftJavaAnalyzer(config: config, diagnosticsSink: sink)
+    let dependencyConfigs = dependencies.map { name, dependency in
+      var dependencyConfig = Configuration()
+      dependencyConfig.exportMode = dependency.exportMode
+      return DependencyConfig(swiftModuleName: name, configuration: dependencyConfig)
+    }
+    let translator = makeSwiftJavaAnalyzer(config: config, dependencyConfigs: dependencyConfigs, diagnosticsSink: sink)
+    for (name, dependency) in dependencies {
+      let input = SwiftInputFile(syntax: Parser.parse(source: dependency.source), path: "/fake/\(name).swift")
+      translator.sourceDependencies.swiftModuleInputs[name] = [input]
+    }
     try translator.analyze(path: "/fake/Fake.swiftinterface", text: source)
     let generator = JNISwift2JavaGenerator(
       config: config,
@@ -87,13 +102,13 @@ struct JNIExportControlTests {
       swiftOutputDirectory: "/fake",
       javaOutputDirectory: "/fake",
       javaClassLookupTable: [:],
-      moduleJavaPackages: [:]
+      moduleJavaPackages: Dictionary(uniqueKeysWithValues: dependencies.keys.map { ($0, "com.example.\($0.lowercased())") })
     )
     var javaPrinter = JavaPrinter(mode: .accumulateAll)
     try generator.writeExportedJavaSources(&javaPrinter)
     var swiftPrinter = SwiftPrinter(mode: .accumulateAll)
     try generator.writeSwiftThunkSources(&swiftPrinter)
-    return sink.skipped + generator.skippedDeclarations
+    return (javaPrinter.finalize(), sink.skipped + generator.skippedDeclarations)
   }
 
   @Test
@@ -118,7 +133,7 @@ struct JNIExportControlTests {
 
   @Test
   func optedOutAndOperatorDeclarationsAreNotSkipped() throws {
-    let skipped = try skipped(optOutSource, .all)
+    let skipped = try generate(optOutSource, .all).skipped
     #expect(skipped.isEmpty, "\(skipped)")
   }
 
@@ -145,7 +160,70 @@ struct JNIExportControlTests {
 
   @Test
   func annotatedModeDoesNotSkipUnmarkedDeclarations() throws {
-    let skipped = try skipped(annotatedSource, .annotated)
+    let skipped = try generate(annotatedSource, .annotated).skipped
     #expect(skipped.isEmpty, "\(skipped)")
+  }
+
+  @Test
+  func annotatedModeKeepsFoundationTypes() throws {
+    let (java, skipped) = try generate(
+      """
+      import Foundation
+      @JavaExport
+      public struct Event {
+        public var date: Date
+        public var link: URL
+      }
+      """,
+      .annotated
+    )
+    #expect(skipped.isEmpty, "\(skipped)")
+    #expect(java.contains("public Date getDate(SwiftArena swiftArena)"), "\(java)")
+    #expect(java.contains("public final class URL"), "\(java)")
+  }
+
+  @Test
+  func declarationsUsingUnexportedTypesAreSkipped() throws {
+    let (java, skipped) = try generate(
+      """
+      public struct Internal {}
+      @JavaExport
+      public struct Uses {
+        public var name: String
+        public var internal: Internal
+        public func make() -> [Internal] { [] }
+      }
+      """,
+      .annotated
+    )
+    #expect(java.contains("public java.lang.String getName()"), "\(java)")
+    #expect(!java.contains("getInternal"), "\(java)")
+    #expect(!java.contains("make("), "\(java)")
+    #expect(skipped.contains { $0.hasPrefix("Uses.internal") && $0.contains("'Internal', which is not exported") }, "\(skipped)")
+  }
+
+  @Test
+  func declarationsUsingUnexportedDependencyTypesAreSkipped() throws {
+    let models = """
+      public struct Cache {}
+      @JavaExport
+      public struct Item {}
+      """
+    let source = """
+      import Models
+      @JavaExport
+      public struct Screen {
+        public var item: Item
+        public var cache: Cache
+      }
+      """
+    let annotated = try generate(source, .annotated, dependencies: ["Models": (models, .annotated)])
+    #expect(annotated.java.contains("getItem"), "\(annotated.java)")
+    #expect(!annotated.java.contains("getCache"), "\(annotated.java)")
+    #expect(annotated.skipped.contains { $0.contains("'Cache', which is not exported") }, "\(annotated.skipped)")
+
+    // A dependency that exports everything exports `Cache` too.
+    let all = try generate(source, .annotated, dependencies: ["Models": (models, .all)])
+    #expect(all.java.contains("getCache"), "\(all.java)")
   }
 }

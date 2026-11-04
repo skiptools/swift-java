@@ -18,6 +18,7 @@ import SwiftSyntax
 
 public func makeSwiftJavaAnalyzer(
   config: Configuration,
+  dependencyConfigs: [DependencyConfig] = [],
   diagnosticsSink: (any SwiftExtractDiagnosticsSink)? = nil
 ) -> SwiftAnalyzer {
   SwiftAnalyzer(
@@ -25,6 +26,12 @@ public func makeSwiftJavaAnalyzer(
     extractDecider: JavaExtractDecider(
       accessLevel: config.effectiveMinimumInputAccessLevelMode,
       exportMode: config.effectiveExportMode,
+      swiftModuleName: config.swiftModule,
+      dependencyExportModes: dependencyConfigs.reduce(into: [:]) { modes, dependency in
+        if let moduleName = dependency.swiftModuleName {
+          modes[moduleName] = dependency.configuration.effectiveExportMode
+        }
+      },
       logLevel: config.logLevel ?? .info
     ),
     diagnosticsSink: diagnosticsSink
@@ -51,11 +58,23 @@ public func makeSwiftJavaAnalyzer(
 public struct JavaExtractDecider: ExtractDecider {
   public let accessLevel: AccessLevelMode
   public let exportMode: JExtractExportMode
+  /// The module being extracted, whose types follow `exportMode`
+  public let swiftModuleName: String?
+  /// The export mode of each dependency module, from its `swift-java.config`
+  public let dependencyExportModes: [String: JExtractExportMode]
   let log: Logger
 
-  public init(accessLevel: AccessLevelMode = .default, exportMode: JExtractExportMode = .default, logLevel: LogLevel = .info) {
+  public init(
+    accessLevel: AccessLevelMode = .default,
+    exportMode: JExtractExportMode = .default,
+    swiftModuleName: String? = nil,
+    dependencyExportModes: [String: JExtractExportMode] = [:],
+    logLevel: LogLevel = .info
+  ) {
     self.accessLevel = accessLevel
     self.exportMode = exportMode
+    self.swiftModuleName = swiftModuleName
+    self.dependencyExportModes = dependencyExportModes
     self.log = Logger(label: "JavaExtractDecider", logLevel: logLevel)
   }
 
@@ -111,11 +130,30 @@ public struct JavaExtractDecider: ExtractDecider {
       return false
     }
 
-    if exportMode == .annotated, inheritedMarker != true, !decl.containsJavaExportedMember {
+    if exportMode == .annotated, inheritedMarker != true, !decl.containsJavaExportedMember,
+      !decl.isFromKnownModuleSource
+    {
       log.trace("Skip '\(decl.qualifiedNameForDebug)': not annotated @JavaExport (exportMode: annotated)")
       return false
     }
     return true
+  }
+
+  public func isExported(_ type: SwiftNominalTypeDeclaration) -> Bool {
+    let mode: JExtractExportMode
+    if type.moduleName == swiftModuleName {
+      mode = exportMode
+    } else if let dependencyMode = dependencyExportModes[type.moduleName] {
+      mode = dependencyMode
+    } else {
+      // A known module such as Foundation, or a module that isn't extracted
+      return true
+    }
+    switch type.syntax.javaExportMarker ?? type.syntax.inheritedJavaExportMarker {
+    case true?: return true
+    case false?: return false
+    case nil: return mode == .all || type.syntax.containsJavaExportedMember
+    }
   }
 
   public func mayExtractMembers(of extensionDecl: ExtensionDeclSyntax) -> Bool {
