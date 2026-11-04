@@ -980,7 +980,7 @@ extension JNISwift2JavaGenerator {
     // `LongUnaryOperator` but is translated to its own interface, which must then be printed.
     if translated.functionTypes.count == 1,
       let ty = translated.functionTypes.first,
-      KnownJavaFunctionalInterface.find(ty.swiftType) != nil
+      KnownJavaFunctionalInterface.find(ty.swiftType, closureMethodName: config.effectiveClosureMethodName) != nil
     {
       return
     }
@@ -1000,7 +1000,7 @@ extension JNISwift2JavaGenerator {
       // `Type.method` constructed, when the method takes no arguments.
       printer.print("private \(className)() {}")
       for functionType in translated.functionTypes {
-        if KnownJavaFunctionalInterface.find(functionType.swiftType) != nil {
+        if KnownJavaFunctionalInterface.find(functionType.swiftType, closureMethodName: config.effectiveClosureMethodName) != nil {
           continue
         }
 
@@ -1025,7 +1025,7 @@ extension JNISwift2JavaGenerator {
       """
       @FunctionalInterface
       public interface \(functionType.name) {
-        \(functionType.result.javaType) apply(\(apiParams.joined(separator: .comma)));
+        \(functionType.result.javaType) \(config.effectiveClosureMethodName)(\(apiParams.joined(separator: .comma)));
       }
       """
     )

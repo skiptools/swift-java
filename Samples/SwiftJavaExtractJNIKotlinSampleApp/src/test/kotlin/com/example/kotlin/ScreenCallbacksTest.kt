@@ -31,24 +31,24 @@ class ScreenCallbacksTest {
     @Test
     fun mainActorClosures() {
         val screen = ScreenModel.init()
-        screen.onTap.apply()
-        screen.onSelect.apply("BTC")
-        assertEquals("Markets", screen.title.apply())
-        screen.onDismiss?.apply()
+        screen.onTap()
+        screen.onSelect("BTC")
+        assertEquals("Markets", screen.title())
+        screen.onDismiss?.invoke()
         assertEquals(listOf("tap", "select BTC", "dismiss"), screen.events.toList())
     }
 
     @Test
     fun asyncClosures() {
         val screen = ScreenModel.init()
-        assertEquals(3L, screen.count.apply("abc").get())
+        assertEquals(3L, screen.count("abc").get())
 
         // `save` runs on the main actor: pump the main loop rather than block the main thread on it.
-        val saved = screen.save.apply("draft")
+        val saved = screen.save("draft")
         await(saved)
         assertEquals(listOf("save draft"), screen.events.toList())
 
-        val failed = screen.save.apply("")
+        val failed = screen.save("")
         await(failed)
         val error = assertFailsWith<ExecutionException> { failed.get() }
         assertIs<ScreenError>(error.cause)

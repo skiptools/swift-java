@@ -101,6 +101,9 @@ extension JNISwift2JavaGenerator {
     /// Conversion step for the result
     let resultConversion: UpcallConversionStep
 
+    /// The name of the interface's single method, `apply` unless `closureMethodName` says otherwise
+    let methodName: String
+
     /// The original Swift function type
     let functionType: SwiftFunctionType
   }
@@ -185,6 +188,7 @@ extension JNISwift2JavaGenerator {
       functionType: SwiftFunctionType,
       javaInterfaceName: String,
       javaBinaryName: String,
+      methodName: String,
     ) throws -> SyntheticEscapingClosureFunctionType {
       if functionType.isAsync {
         try validateAsyncResult(functionType.resultType)
@@ -198,7 +202,7 @@ extension JNISwift2JavaGenerator {
 
       let resultConversion = try self.translateResult(
         type: functionType.resultType,
-        methodName: "apply"
+        methodName: methodName
       )
 
       return SyntheticEscapingClosureFunctionType(
@@ -206,6 +210,7 @@ extension JNISwift2JavaGenerator {
         javaBinaryName: javaBinaryName,
         parameterConversions: parameterConversions,
         resultConversion: resultConversion,
+        methodName: methodName,
         functionType: functionType
       )
     }

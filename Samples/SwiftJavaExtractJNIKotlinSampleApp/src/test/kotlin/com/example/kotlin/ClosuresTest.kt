@@ -65,7 +65,7 @@ class ClosuresTest {
         assertNull(notifier.onItem)
         notifier.onItem = { item -> seen += item.id }
         notifier.emit("a")
-        notifier.onItem?.apply(Item.init("b", 1))   // the Swift closure, calling the lambda
+        notifier.onItem?.invoke(Item.init("b", 1))   // the Swift closure, calling the lambda
         notifier.onItem = null
         notifier.emit("c")
         assertEquals(listOf("a", "b"), seen)
@@ -74,7 +74,7 @@ class ClosuresTest {
     @Test
     fun returnedClosure() {
         val format = Notifier.init().makeFormatter("#")
-        assertEquals(listOf("#1", "#2"), listOf("1", "2").map { format.apply(Item.init(it, 1)) })
+        assertEquals(listOf("#1", "#2"), listOf("1", "2").map { format(Item.init(it, 1)) })
     }
 
     @Test
