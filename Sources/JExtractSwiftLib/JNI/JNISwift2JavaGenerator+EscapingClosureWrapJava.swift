@@ -65,6 +65,12 @@ extension JNISwift2JavaGenerator {
   /// The Swift spelling of a closure parameter or result in the `@JavaInterface` wrapper.
   /// Jextracted types are passed as their Java class, through its JavaKit wrapper.
   private func wrapJavaTypeName(_ type: SwiftType, isResult: Bool) -> String {
+    if type.isSwiftError {
+      return isResult ? "Throwable!" : "Throwable?"
+    }
+    if !isResult, optionalWrapped(type)?.isSwiftError == true {
+      return "JavaOptional<Throwable>?"
+    }
     if let nominal = jextractedNominal(type) {
       return nominal.generatedJavaClassMacroName + (isResult ? "!" : "?")
     }
