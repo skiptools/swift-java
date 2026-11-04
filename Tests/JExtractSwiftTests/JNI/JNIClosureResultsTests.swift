@@ -154,9 +154,48 @@ struct JNIClosureResultsTests {
   }
 
   @Test
-  func mainActorClosureResult_isSkipped() throws {
+  func mainActorClosureResult_runsOnTheMainActor() throws {
     try assertOutput(
-      input: "public func makeHandler() -> @MainActor () -> Void {}",
+      input: "public func makeHandler() -> @MainActor (String) -> Int64 {}",
+      .jni,
+      .swift,
+      detectChunkByInitialLines: 1,
+      expectedChunks: [
+        """
+        return _makeMainActorSwiftClosure { arguments$, environment in
+          nonisolated(unsafe) let callee$ = closure$
+          return JavaBoxableBridge<Int64>.toJavaObject(callee$(JavaBoxableBridge<String>.fromJavaObject(_swiftClosureArgument(arguments$, 0, in: environment), in: environment)), in: environment)
+        }
+        """
+      ]
+    )
+  }
+
+  @Test
+  func asyncClosureResult_returnsAFuture() throws {
+    try assertOutput(
+      input: "public func makeLoader() -> @MainActor (String) async throws -> Int64 {}",
+      .jni,
+      .swift,
+      detectChunkByInitialLines: 1,
+      expectedChunks: [
+        """
+        return _makeSwiftClosure { arguments$, environment in
+          nonisolated(unsafe) let callee$ = closure$
+          nonisolated(unsafe) let argument0$ = JavaBoxableBridge<String>.fromJavaObject(_swiftClosureArgument(arguments$, 0, in: environment), in: environment)
+          return _swiftClosureFuture(in: environment) { environment in
+            return JavaBoxableBridge<Int64>.toJavaObject(try await callee$(argument0$), in: environment)
+          }
+        }
+        """
+      ]
+    )
+  }
+
+  @Test
+  func throwingClosureResult_isSkipped() throws {
+    try assertOutput(
+      input: "public func makeHandler() -> () throws -> Void {}",
       .jni,
       .java,
       detectChunkByInitialLines: 1,

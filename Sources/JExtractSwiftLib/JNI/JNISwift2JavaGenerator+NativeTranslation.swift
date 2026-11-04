@@ -1354,15 +1354,22 @@ extension JNISwift2JavaGenerator {
 
     /// A returned closure, as the handle of a Swift closure Java calls with boxed arguments; 0 for `nil`.
     func translateSwiftClosureResult(_ functionType: SwiftFunctionType, isOptional: Bool) throws -> NativeResult {
-      // Java calls it synchronously, on any thread.
-      if functionType.isAsync || functionType.isThrowing || functionType.isMainActorIsolated {
+      // A synchronous call from Java has no way to receive a thrown error; an async one completes
+      // its future with it.
+      if functionType.isThrowing && !functionType.isAsync {
         throw JavaTranslationError.unsupportedSwiftType(.function(functionType))
       }
       let argumentBridges = try functionType.parameters.map { try bridgeTypeName(for: $0.type) }
       let resultBridge = functionType.resultType.isVoid ? nil : try bridgeTypeName(for: functionType.resultType)
       return NativeResult(
         javaType: .long,
-        conversion: .swiftClosure(argumentBridges: argumentBridges, resultBridge: resultBridge, isOptional: isOptional),
+        conversion: .swiftClosure(
+          argumentBridges: argumentBridges,
+          resultBridge: resultBridge,
+          isOptional: isOptional,
+          isMainActor: functionType.isMainActorIsolated,
+          effects: functionType.isAsync ? (functionType.isThrowing ? "try await " : "await ") : nil
+        ),
         outParameters: []
       )
     }
@@ -1543,7 +1550,15 @@ extension JNISwift2JavaGenerator {
 
     /// The handle of a new Swift closure calling the closure value, which converts the boxed Java arguments
     /// and result with these `JobjectBridge`s (no result bridge for `Void`).
-    case swiftClosure(argumentBridges: [String], resultBridge: String?, isOptional: Bool)
+    /// A closure returned to Java. `effects` is the `await` or `try await` that calls an async closure,
+    /// `nil` for a synchronous one.
+    case swiftClosure(
+      argumentBridges: [String],
+      resultBridge: String?,
+      isOptional: Bool,
+      isMainActor: Bool,
+      effects: String?
+    )
 
     indirect case optionalLowering(NativeSwiftConversionStep, discriminatorName: String, valueName: String)
 
@@ -1996,20 +2011,41 @@ extension JNISwift2JavaGenerator {
       case .nilOrClosure(let inner):
         return "\(placeholder) == nil ? nil : \(inner.render(&printer, placeholder))"
 
-      case .swiftClosure(let argumentBridges, let resultBridge, let isOptional):
+      case .swiftClosure(let argumentBridges, let resultBridge, let isOptional, let isMainActor, let effects):
         printer.print("let closure$ = \(placeholder)")
         let arguments = argumentBridges.enumerated().map { index, bridge in
           "\(bridge).fromJavaObject(_swiftClosureArgument(arguments$, \(index), in: environment), in: environment)"
         }
-        let call = "closure$(\(arguments.joined(separator: .comma)))"
-        let body =
-          if let resultBridge {
-            ["return \(resultBridge).toJavaObject(\(call), in: environment)"]
-          } else {
-            [call, "return nil"]
-          }
+        let body: [String]
+        if let effects {
+          // Convert the arguments on the calling thread, then await the closure in a task whose
+          // future Java gets back. The closure and its arguments move into that task.
+          let argumentNames = arguments.indices.map { "argument\($0)$" }
+          let call = "\(effects)callee$(\(argumentNames.joined(separator: .comma)))"
+          let result =
+            if let resultBridge {
+              ["  return \(resultBridge).toJavaObject(\(call), in: environment)"]
+            } else {
+              ["  \(call)", "  return nil"]
+            }
+          body =
+            ["nonisolated(unsafe) let callee$ = closure$"]
+            + zip(argumentNames, arguments).map { "nonisolated(unsafe) let \($0) = \($1)" }
+            + ["return _swiftClosureFuture(in: environment) { environment in"] + result + ["}"]
+        } else {
+          let callee = isMainActor ? "callee$" : "closure$"
+          let call = "\(callee)(\(arguments.joined(separator: .comma)))"
+          let result =
+            if let resultBridge {
+              ["return \(resultBridge).toJavaObject(\(call), in: environment)"]
+            } else {
+              [call, "return nil"]
+            }
+          body = (isMainActor ? ["nonisolated(unsafe) let callee$ = closure$"] : []) + result
+        }
+        let maker = isMainActor && effects == nil ? "_makeMainActorSwiftClosure" : "_makeSwiftClosure"
         let make =
-          (["_makeSwiftClosure { arguments$, environment in"] + body.map { "  \($0)" } + ["}"])
+          (["\(maker) { arguments$, environment in"] + body.map { "  \($0)" } + ["}"])
           .joined(separator: "\n")
         return isOptional ? "closure$.map { closure$ in \(make) } ?? 0" : make
 
