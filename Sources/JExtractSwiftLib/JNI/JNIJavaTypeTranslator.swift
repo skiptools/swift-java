@@ -42,21 +42,31 @@ enum JNIJavaTypeTranslator {
 
     case .string: return .javaLangString
 
+    case .foundationCGFloat: return .double
+
+    case .foundationURL, .essentialsURL:
+      return config.effectiveFoundationTypesAsJavaTypes ? .javaNetURI : nil
+    case .foundationDate, .essentialsDate:
+      return config.effectiveFoundationTypesAsJavaTypes ? .javaUtilDate : nil
+    case .foundationData, .essentialsData:
+      return config.effectiveFoundationTypesAsJavaTypes ? .array(.byte) : nil
+    case .foundationLocale, .essentialsLocale:
+      return config.effectiveFoundationTypesAsJavaTypes ? .javaUtilLocale : nil
+    case .foundationTimeZone, .essentialsTimeZone:
+      return config.effectiveFoundationTypesAsJavaTypes ? .javaUtilTimeZone : nil
+
     case .unsafeRawPointer, .unsafeMutableRawPointer,
       .unsafePointer, .unsafeMutablePointer,
       .unsafeRawBufferPointer, .unsafeMutableRawBufferPointer,
       .unsafeBufferPointer, .unsafeMutableBufferPointer,
       .opaquePointer,
       .optional,
-      .foundationData, .foundationDataProtocol,
-      .essentialsData, .essentialsDataProtocol,
+      .foundationDataProtocol, .essentialsDataProtocol,
       .array,
       .dictionary,
       .set,
       .asyncStream, .asyncThrowingStream, .error,
-      .foundationDate, .essentialsDate,
-      .foundationUUID, .essentialsUUID,
-      .foundationURL, .essentialsURL:
+      .foundationUUID, .essentialsUUID:
       return nil
     }
   }
@@ -68,6 +78,7 @@ enum JNIJavaTypeTranslator {
     switch knownKind {
     case .int: knownTypes.int64
     case .uint: knownTypes.uint64
+    case .foundationCGFloat: knownTypes.double
 
     case .bool, .int8, .uint8, .int16, .uint16, .int32, .uint32, .int64, .uint64,
       .float, .double, .void, .string,
@@ -85,7 +96,9 @@ enum JNIJavaTypeTranslator {
       .asyncStream, .asyncThrowingStream, .error,
       .foundationDate, .essentialsDate,
       .foundationUUID, .essentialsUUID,
-      .foundationURL, .essentialsURL:
+      .foundationURL, .essentialsURL,
+      .foundationLocale, .essentialsLocale,
+      .foundationTimeZone, .essentialsTimeZone:
       nil
     }
   }
@@ -114,7 +127,10 @@ enum JNIJavaTypeTranslator {
       .asyncStream, .asyncThrowingStream, .error,
       .foundationDate, .essentialsDate,
       .foundationUUID, .essentialsUUID,
-      .foundationURL, .essentialsURL:
+      .foundationURL, .essentialsURL,
+      .foundationLocale, .essentialsLocale,
+      .foundationTimeZone, .essentialsTimeZone,
+      .foundationCGFloat:
       nil
     }
   }

@@ -34,6 +34,8 @@ extension JNISwift2JavaGenerator {
       }
 
       do {
+        // wrap-java maps `java.net.URI` and the other Foundation Java types on its own terms, so
+        // protocols implemented in Java don't pass Foundation values as they are; closures do.
         let translator = JavaInterfaceProtocolWrapperGenerator(asyncFuncMode: config.effectiveAsyncFuncMode)
         wrappers[type] = try translator.generate(for: type)
       } catch {
@@ -105,6 +107,13 @@ extension JNISwift2JavaGenerator {
 
   struct JavaInterfaceProtocolWrapperGenerator {
     var asyncFuncMode: JExtractAsyncFuncMode = .default
+    /// Foundation values are `JavaValue`s that cross as Java types, as `String` does. Only for closures, whose
+    /// `@JavaInterface` jextract prints itself.
+    var foundationTypesAsJavaTypes: Bool = false
+
+    private func crossesAsIs(_ type: SwiftType) -> Bool {
+      type.isDirectlyTranslatedToWrapJava || (foundationTypesAsJavaTypes && type.isFoundationJavaValue)
+    }
 
     func generate(for type: ExtractedNominalType) throws -> JavaInterfaceSwiftWrapper {
       if !type.initializers.isEmpty
@@ -238,7 +247,7 @@ extension JNISwift2JavaGenerator {
 
     private func translateParameter(parameterName: String, type: SwiftType) throws -> UpcallConversionStep {
 
-      if type.isDirectlyTranslatedToWrapJava {
+      if crossesAsIs(type) {
         return .placeholder
       }
       if type.isSwiftError {
@@ -322,7 +331,7 @@ extension JNISwift2JavaGenerator {
       methodName: String,
       allowNilForObjects: Bool = false
     ) throws -> UpcallConversionStep {
-      if type.isDirectlyTranslatedToWrapJava {
+      if crossesAsIs(type) {
         return .placeholder
       }
 
@@ -507,6 +516,20 @@ enum UpcallConversionStep {
 }
 
 extension SwiftType {
+  /// A Foundation value that conforms to `JavaValue` in SwiftJavaRuntimeSupport, used with `foundationTypesAsJavaTypes`
+  var isFoundationJavaValue: Bool {
+    guard case .nominal(let nominal) = self, let kind = nominal.nominalTypeDecl.knownTypeKind else {
+      return false
+    }
+    switch kind {
+    case .foundationURL, .essentialsURL, .foundationDate, .essentialsDate, .foundationData, .essentialsData,
+      .foundationLocale, .essentialsLocale, .foundationTimeZone, .essentialsTimeZone:
+      return true
+    default:
+      return false
+    }
+  }
+
   /// Indicates whether this type is translated by `wrap-java`
   /// into the same type as `jextract`.
   ///

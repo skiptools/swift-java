@@ -199,7 +199,12 @@ extension JNISwift2JavaGenerator {
               conversionCheck: nil
             )
 
-          case .foundationDate, .essentialsDate, .foundationData, .essentialsData, .foundationURL, .essentialsURL:
+          case .foundationDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .foundationData where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsData where !config.effectiveFoundationTypesAsJavaTypes,
+            .foundationURL where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsURL where !config.effectiveFoundationTypesAsJavaTypes:
             // Handled as wrapped struct
             break
 
@@ -438,7 +443,10 @@ extension JNISwift2JavaGenerator {
         method: methodName,
         qualifier: parameterName,
       )
-      let generator = JavaInterfaceProtocolWrapperGenerator(asyncFuncMode: config.effectiveAsyncFuncMode)
+      let generator = JavaInterfaceProtocolWrapperGenerator(
+        asyncFuncMode: config.effectiveAsyncFuncMode,
+        foundationTypesAsJavaTypes: config.effectiveFoundationTypesAsJavaTypes
+      )
       let syntheticFunction = try generator.generateSyntheticClosureFunction(
         functionType: functionType,
         javaInterfaceName: javaClosureInterfaceName,
@@ -591,11 +599,13 @@ extension JNISwift2JavaGenerator {
 
         if let knownType = nominalType.nominalTypeDecl.knownTypeKind {
           switch knownType {
-          case .foundationDate, .essentialsDate:
+          case .foundationDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsDate where !config.effectiveFoundationTypesAsJavaTypes:
             // Handled as wrapped struct
             break
 
-          case .foundationData, .essentialsData:
+          case .foundationData where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsData where !config.effectiveFoundationTypesAsJavaTypes:
             // Handled as wrapped struct
             break
 
@@ -909,7 +919,12 @@ extension JNISwift2JavaGenerator {
               resultName: resultName
             )
 
-          case .foundationDate, .essentialsDate, .foundationData, .essentialsData, .foundationURL, .essentialsURL:
+          case .foundationDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .foundationData where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsData where !config.effectiveFoundationTypesAsJavaTypes,
+            .foundationURL where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsURL where !config.effectiveFoundationTypesAsJavaTypes:
             // Handled as wrapped struct
             break
 
@@ -1370,6 +1385,8 @@ extension JNISwift2JavaGenerator {
             return "SetBridge<\(try bridgeTypeName(for: element))>"
           case .bool, .int, .uint, .int8, .uint8, .int16, .uint16, .int32, .uint32, .int64, .uint64, .float, .double, .string:
             return "JavaBoxableBridge<\(swiftType)>"
+          case _ where config.effectiveFoundationTypesAsJavaTypes && swiftType.isFoundationJavaValue:
+            return "JavaObjectValueBridge<\(swiftType)>"
           default:
             throw JavaTranslationError.unsupportedSwiftType(swiftType)
           }
