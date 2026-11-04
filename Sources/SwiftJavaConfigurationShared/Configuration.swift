@@ -181,6 +181,14 @@ public struct Configuration: Codable {
     enableJavaCallbacks ?? false
   }
 
+  /// Which declarations to export: `all` (default) exports every declaration that passes the access level
+  /// and filters, except those opted out with `@JavaExport(false)`. `annotated` exports only declarations marked
+  /// `@JavaExport`, including the members of a marked type or extension.
+  public var exportMode: JExtractExportMode?
+  public var effectiveExportMode: JExtractExportMode {
+    exportMode ?? .default
+  }
+
   /// If true, JExtract fails after generating when it skipped any declaration it could not
   /// extract or translate, and lists each one. Skipped declarations are always reported as warnings.
   public var failOnSkippedDeclarations: Bool?
