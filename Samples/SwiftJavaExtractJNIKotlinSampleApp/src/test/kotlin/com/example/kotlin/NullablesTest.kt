@@ -45,4 +45,14 @@ class NullablesTest {
         quote.note = null
         assertNull(quote.note)
     }
+
+    // With `nullableAnnotation` and `nonNullAnnotation`, Kotlin infers `Quote?` and `String`, not `Quote!` and `String!`.
+    @Test
+    fun annotatedTypes() {
+        val quote = Quotes.last("a")
+        val price: Double = quote?.price ?: 0.0
+        assertEquals(1.5, price)
+        val text: String = Quotes.describe(null, 3L)
+        assertEquals("- 3", text)
+    }
 }
