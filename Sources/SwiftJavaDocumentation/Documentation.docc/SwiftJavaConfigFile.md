@@ -262,7 +262,7 @@ extract or translate, and lists each one. Skipped declarations are always report
 - **Default:** `false`
 
 If true, Swift enums whose cases have no associated values are generated as Java `enum`s,
-with one constant per case, instead of classes wrapping a Swift value. Only supported in
+with one constant per case named like the case, instead of classes wrapping a Swift value. Only supported in
 `jni` mode.
 
 ---
