@@ -451,6 +451,7 @@ extension JNISwift2JavaGenerator {
         functionType: functionType,
         javaInterfaceName: javaClosureInterfaceName,
         javaBinaryName: javaBinaryName,
+        methodName: config.effectiveClosureMethodName,
       )
 
       return NativeParameter(
@@ -489,7 +490,10 @@ extension JNISwift2JavaGenerator {
       }
 
       let result = try translateClosureResult(functionType.resultType)
-      let knownInterface = KnownJavaFunctionalInterface.find(functionType)
+      let knownInterface = KnownJavaFunctionalInterface.find(
+        functionType,
+        closureMethodName: config.effectiveClosureMethodName
+      )
       let interfaceJavaType =
         if let known = knownInterface {
           known.javaType
@@ -512,7 +516,7 @@ extension JNISwift2JavaGenerator {
           result: result,
           // The method to call is decided with the interface, from the Swift type: the JNI
           // signature alone can't tell `(Int) -> Int`'s own interface from `LongUnaryOperator`.
-          methodName: knownInterface?.method ?? "apply"
+          methodName: knownInterface?.method ?? config.effectiveClosureMethodName
         ),
         indirectConversion: nil,
         conversionCheck: nil
@@ -1938,9 +1942,11 @@ extension JNISwift2JavaGenerator {
           let tryKeyword = fn.isThrowing ? "try" : "try!"
           let arguments = upcallArguments.isEmpty ? "" : "arguments: \(upcallArguments.joined(separator: .comma)), "
           resultPrinter.print(
-            "let future$ = \(tryKeyword) \(callInterfaceVar).dynamicJavaMethodCall(methodName: \"apply\", \(arguments)resultType: JavaCompletableFuture?.self)"
+            "let future$ = \(tryKeyword) \(callInterfaceVar).dynamicJavaMethodCall(methodName: \"\(syntheticFunction.methodName)\", \(arguments)resultType: JavaCompletableFuture?.self)"
           )
-          resultPrinter.print("guard let future$ else { fatalError(\"Upcall to apply unexpectedly returned a null future\") }")
+          resultPrinter.print(
+            "guard let future$ else { fatalError(\"Upcall to \(syntheticFunction.methodName) unexpectedly returned a null future\") }"
+          )
           if isVoid {
             resultConverted = "_ = \(tryKeyword) await _awaitCompletableFuture(future$)"
           } else {
@@ -1954,7 +1960,7 @@ extension JNISwift2JavaGenerator {
             }
           }
         } else {
-          let upcallExpr = "\(callInterfaceVar).apply(\(upcallArguments.joined(separator: .comma)))"
+          let upcallExpr = "\(callInterfaceVar).\(syntheticFunction.methodName)(\(upcallArguments.joined(separator: .comma)))"
           resultConverted = syntheticFunction.resultConversion.render(&resultPrinter, upcallExpr)
         }
         let resultPrefix = resultPrinter.finalize()
