@@ -32,6 +32,7 @@ public func makeSwiftJavaAnalyzer(
           modes[moduleName] = dependency.configuration.effectiveExportMode
         }
       },
+      foundationTypesAsJavaTypes: config.effectiveMode == .jni && config.effectiveFoundationTypesAsJavaTypes,
       logLevel: config.logLevel ?? .info
     ),
     diagnosticsSink: diagnosticsSink
@@ -62,6 +63,8 @@ public struct JavaExtractDecider: ExtractDecider {
   public let swiftModuleName: String?
   /// The export mode of each dependency module, from its `swift-java.config`
   public let dependencyExportModes: [String: JExtractExportMode]
+  /// Whether `Data`, `Date` and `URL` cross as Java types, so no wrapper type is extracted for them
+  public let foundationTypesAsJavaTypes: Bool
   let log: Logger
 
   public init(
@@ -69,12 +72,14 @@ public struct JavaExtractDecider: ExtractDecider {
     exportMode: JExtractExportMode = .default,
     swiftModuleName: String? = nil,
     dependencyExportModes: [String: JExtractExportMode] = [:],
+    foundationTypesAsJavaTypes: Bool = false,
     logLevel: LogLevel = .info
   ) {
     self.accessLevel = accessLevel
     self.exportMode = exportMode
     self.swiftModuleName = swiftModuleName
     self.dependencyExportModes = dependencyExportModes
+    self.foundationTypesAsJavaTypes = foundationTypesAsJavaTypes
     self.log = Logger(label: "JavaExtractDecider", logLevel: logLevel)
   }
 
@@ -161,6 +166,15 @@ public struct JavaExtractDecider: ExtractDecider {
     case true?: true
     case false?: false
     case nil: exportMode == .all || extensionDecl.containsJavaExportedMember
+    }
+  }
+
+  public func shouldExtractFoundationType(_ kind: SwiftKnownTypeDeclKind) -> Bool {
+    switch kind {
+    case .foundationData, .essentialsData, .foundationDate, .essentialsDate, .foundationURL, .essentialsURL:
+      !foundationTypesAsJavaTypes
+    default:
+      true
     }
   }
 }

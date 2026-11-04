@@ -58,6 +58,11 @@ public enum SwiftKnownType: Equatable {
   case foundationURL
   case essentialsURL
   case error
+  case foundationLocale
+  case essentialsLocale
+  case foundationTimeZone
+  case essentialsTimeZone
+  case foundationCGFloat
 
   public init?(kind: SwiftKnownTypeDeclKind, genericArguments: [SwiftType]?) {
     switch kind {
@@ -122,6 +127,11 @@ public enum SwiftKnownType: Equatable {
     case .essentialsUUID: self = .essentialsUUID
     case .foundationURL: self = .foundationURL
     case .essentialsURL: self = .essentialsURL
+    case .foundationLocale: self = .foundationLocale
+    case .essentialsLocale: self = .essentialsLocale
+    case .foundationTimeZone: self = .foundationTimeZone
+    case .essentialsTimeZone: self = .essentialsTimeZone
+    case .foundationCGFloat: self = .foundationCGFloat
     }
   }
 
@@ -168,6 +178,11 @@ public enum SwiftKnownType: Equatable {
     case .foundationURL: .foundationURL
     case .essentialsURL: .essentialsURL
     case .error: .error
+    case .foundationLocale: .foundationLocale
+    case .essentialsLocale: .essentialsLocale
+    case .foundationTimeZone: .foundationTimeZone
+    case .essentialsTimeZone: .essentialsTimeZone
+    case .foundationCGFloat: .foundationCGFloat
     }
   }
 }
@@ -217,6 +232,11 @@ public enum SwiftKnownTypeDeclKind: String, Hashable {
   case essentialsUUID = "FoundationEssentials.UUID"
   case foundationURL = "Foundation.URL"
   case essentialsURL = "FoundationEssentials.URL"
+  case foundationLocale = "Foundation.Locale"
+  case essentialsLocale = "FoundationEssentials.Locale"
+  case foundationTimeZone = "Foundation.TimeZone"
+  case essentialsTimeZone = "FoundationEssentials.TimeZone"
+  case foundationCGFloat = "Foundation.CGFloat"
 
   public var moduleAndName: (module: String, name: String) {
     let qualified = self.rawValue

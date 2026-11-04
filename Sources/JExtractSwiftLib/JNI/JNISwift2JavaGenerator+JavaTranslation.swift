@@ -664,7 +664,12 @@ extension JNISwift2JavaGenerator {
               genericRequirements: genericRequirements,
             )
 
-          case .foundationDate, .essentialsDate, .foundationData, .essentialsData, .foundationURL, .essentialsURL:
+          case .foundationDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .foundationData where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsData where !config.effectiveFoundationTypesAsJavaTypes,
+            .foundationURL where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsURL where !config.effectiveFoundationTypesAsJavaTypes:
             break // Handled as wrapped struct
 
           case .unsafeRawBufferPointer, .unsafeMutableRawBufferPointer:
@@ -1105,14 +1110,17 @@ extension JNISwift2JavaGenerator {
       guard case .class(_, let name, let typeParameters) = type else {
         return nil
       }
+      // Spelled as one class name, such as `Optional<Boolean>` or `Optional<java.net.URI>`. The dots in
+      // the latter split it into a package and a name, so match the whole spelling.
+      let spelling = type.description
+      if typeParameters.isEmpty, spelling.hasPrefix("Optional<"), spelling.hasSuffix(">") {
+        return (JavaType(className: String(spelling.dropFirst("Optional<".count).dropLast())), "get")
+      }
       switch name {
       case "OptionalLong": return (.class(package: "java.lang", name: "Long"), "getAsLong")
       case "OptionalInt": return (.class(package: "java.lang", name: "Integer"), "getAsInt")
       case "OptionalDouble": return (.class(package: "java.lang", name: "Double"), "getAsDouble")
       case "Optional" where typeParameters.count == 1: return (typeParameters[0], "get")
-      // Primitive optionals spelled as one class name, such as `Optional<Boolean>`
-      case _ where name.hasPrefix("Optional<") && name.hasSuffix(">"):
-        return (JavaType(className: name.dropFirst("Optional<".count).dropLast()), "get")
       default: return nil
       }
     }
@@ -1169,11 +1177,13 @@ extension JNISwift2JavaGenerator {
 
         if let knownType = nominalType.nominalTypeDecl.knownTypeKind {
           switch knownType {
-          case .foundationDate, .essentialsDate:
+          case .foundationDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsDate where !config.effectiveFoundationTypesAsJavaTypes:
             // Handled as wrapped struct
             break
 
-          case .foundationData, .essentialsData:
+          case .foundationData where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsData where !config.effectiveFoundationTypesAsJavaTypes:
             // Handled as wrapped struct
             break
 
@@ -1309,7 +1319,12 @@ extension JNISwift2JavaGenerator {
               genericRequirements: genericRequirements,
             )
 
-          case .foundationDate, .essentialsDate, .foundationData, .essentialsData, .foundationURL, .essentialsURL:
+          case .foundationDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .foundationData where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsData where !config.effectiveFoundationTypesAsJavaTypes,
+            .foundationURL where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsURL where !config.effectiveFoundationTypesAsJavaTypes:
             // Handled as wrapped struct
             break
 
@@ -1499,16 +1514,19 @@ extension JNISwift2JavaGenerator {
             )
             return .swiftSet(elementJavaType)
 
-          case .foundationDate, .essentialsDate:
+          case .foundationDate where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsDate where !config.effectiveFoundationTypesAsJavaTypes:
             return .class(package: nil, name: "Date")
 
-          case .foundationData, .essentialsData:
+          case .foundationData where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsData where !config.effectiveFoundationTypesAsJavaTypes:
             return .class(package: nil, name: "Data")
 
           case .foundationDataProtocol, .essentialsDataProtocol:
             return .class(package: nil, name: "DataProtocol")
 
-          case .foundationURL, .essentialsURL:
+          case .foundationURL where !config.effectiveFoundationTypesAsJavaTypes,
+            .essentialsURL where !config.effectiveFoundationTypesAsJavaTypes:
             return .class(package: nil, name: "URL")
 
           case .foundationUUID, .essentialsUUID:
